@@ -11,6 +11,77 @@
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.bundle.min.js"></script>
 
     <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        }
+
+        h1,
+        h3 {
+            font-weight: 600;
+            background: linear-gradient(90deg, #007bff, #00c6ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .btn {
+            border-radius: 6px;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        }
+
+        /* 给整个标签栏加滚动条 */
+        #filters {
+            max-height: 75vh;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 10px;
+        }
+
+        #filters h5 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-top: 10px;
+            border-left: 3px solid #007bff;
+            padding-left: 6px;
+        }
+
+        /* 去掉物品树的缩进 */
+        #filters ul {
+            list-style: none;
+            padding-left: 0;
+            margin-left: 0;
+        }
+
+        .video-card {
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            min-height: 120px;
+            cursor: pointer;
+        }
+
+        .video-card:hover {
+            transform: scale(1.03);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        .video-card video {
+            border-radius: 8px;
+            background: #000;
+            display: block;
+        }
+
+        .video-card.selected video {
+            border: 3px solid orange !important;
+        }
+
         .video-overlay {
             position: absolute;
             top: 0;
@@ -25,7 +96,7 @@
             justify-content: center;
             text-align: center;
             align-items: center;
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             padding: 5px;
             z-index: 10;
             pointer-events: none;
@@ -38,25 +109,6 @@
         .checkbox-container {
             font-size: 0.95rem;
             margin-bottom: -0.25rem;
-        }
-
-        .video-card {
-            min-height: 120px;
-            cursor: pointer;
-        }
-
-        .video-card.selected video {
-            border: 3px solid orange !important;
-        }
-
-        video.border {
-            background: #000;
-            display: block;
-        }
-
-        #filters {
-            max-height: 80vh;
-            overflow-y: auto;
         }
 
         .tree-toggle {
@@ -77,13 +129,10 @@
             display: block;
         }
 
-        #filters ul {
-            list-style: none;
-            padding-left: 0;
-        }
-
-        #filters li {
-            margin: 2px 0;
+        #downloadCommand {
+            font-family: monospace;
+            background: #f5f5f5;
+            border-radius: 6px;
         }
     </style>
 </head>
@@ -141,7 +190,6 @@
             </div>
         </div>
     </div>
-    
 
     <script>
         (function () {
@@ -210,11 +258,19 @@
                                 } else if (enKey === "item" && typeof val === "object") {
                                     ds[enKey] = Object.values(val).filter(v => v && v !== "null");
                                 } else {
-                                    ds[enKey] = val;
+                                    // 特殊处理：声音传感器 & 触觉传感器，存成字符串，避免 0 被忽略
+                                    if (enKey === "soundSensors" || enKey === "tactileSensors") {
+                                        ds[enKey] = String(val);
+                                    } else {
+                                        ds[enKey] = val;
+                                    }
                                 }
                             }
                             ds.path = String(fileName).replace(/\.yml$/i, '');
                             ds.id = String(idCounter++);
+
+                            debugger ;
+
                             datasets.push(ds);
                         }
 
@@ -226,6 +282,8 @@
                     }
                 }
 
+                
+
                 function buildAllCheckboxGroups(datasets) {
                     filters.innerHTML = '';
                     for (const [cnKey, enKey] of Object.entries(chineseToEnglishMapping)) {
@@ -236,7 +294,9 @@
                             const valueSet = new Set();
                             datasets.forEach(ds => {
                                 if (Array.isArray(ds[enKey])) ds[enKey].forEach(v => valueSet.add(String(v)));
-                                else if (ds[enKey]) valueSet.add(String(ds[enKey]));
+                                else if (ds[enKey] !== undefined && ds[enKey] !== null) {
+                                    valueSet.add(String(ds[enKey]));
+                                }
                             });
                             buildGroup(filters, cnKey, enKey, valueSet);
                         }
@@ -249,7 +309,12 @@
                     html += '<div class="checkbox-container"><label><input type="checkbox" id="' + cssClass + '-all-checkbox" checked> 全部</label></div>';
                     values.forEach((val, i) => {
                         const id = cssClass + '-' + (i + 1);
-                        html += '<div class="checkbox-container"><label><input type="checkbox" class="' + cssClass + '-checkbox" id="' + id + '" value="' + escapeHtml(val) + '"> ' + escapeHtml(val) + ' <small class="text-muted">(<span id="' + id + '-count">0</span>)</small></label></div>';
+                        const safeVal = String(val).trim();
+                        html += '<div class="checkbox-container"><label><input type="checkbox" class="' 
+                            + cssClass + '-checkbox" data-field="' + cssClass + '" id="' + id + '" value="' 
+                            + escapeHtml(safeVal) + '"> ' 
+                            + escapeHtml(safeVal) 
+                            + ' <small class="text-muted">(<span id="' + id + '-count">0</span>)</small></label></div>';
                     });
                     const block = document.createElement('div');
                     block.innerHTML = html;
@@ -290,13 +355,13 @@
                             const id = prefix + '-' + i;
                             const hasChild = Object.keys(node[key]).length > 0;
                             html += `<li>
-                <label class="checkbox-container">
-                  <input type="checkbox" class="item-checkbox" id="${id}" value="${escapeHtml(key)}">
-                  ${escapeHtml(key)} <small class="text-muted">(<span id="${id}-count">0</span>)</small>
-                </label>`;
+                                <label class="checkbox-container">
+                                <input type="checkbox" class="item-checkbox" id="${id}" value="${escapeHtml(key)}">
+                                ${escapeHtml(key)} <small class="text-muted">(<span id="${id}-count">0</span>)</small>
+                                </label>`;
                             if (hasChild) {
                                 html += `<span class="tree-toggle">▶</span>
-                         <div class="nested">${renderNode(node[key], id)}</div>`;
+                                <div class="nested">${renderNode(node[key], id)}</div>`;
                             }
                             html += `</li>`;
                         });
@@ -319,11 +384,20 @@
                 }
 
                 function applyFilters() {
+
+                    console.log("当前映射表:", chineseToEnglishMapping);
+                    console.log("某个数据集:", currentDatasets[0]);
+
+
                     selectedDatasets.clear();
                     const q = (searchBox && searchBox.value) ? String(searchBox.value).trim().toLowerCase() : '';
 
                     const activeFilters = {};
                     for (const [cnKey, enKey] of Object.entries(chineseToEnglishMapping)) {
+
+                        console.log("正在统计字段:", enKey);
+
+
                         if (["name", "description", "path", "id"].includes(enKey)) continue;
                         if (enKey === "item") {
                             const checked = Array.from(document.querySelectorAll('.item-checkbox:checked')).map(cb => cb.value);
@@ -345,7 +419,7 @@
                         for (const [key, vals] of Object.entries(activeFilters)) {
                             if (Array.isArray(ds[key])) {
                                 if (!ds[key].some(v => vals.includes(String(v)))) return false;
-                            } else if (ds[key] !== undefined) {
+                            } else if (ds[key] !== undefined && ds[key] !== null) {
                                 if (!vals.includes(String(ds[key]))) return false;
                             } else {
                                 return false;
@@ -354,15 +428,26 @@
                         return true;
                     });
 
+                    debugger ; 
+                    // 修复统计 key 的类型问题（保证数字 0 也能统计到）
                     for (const [cnKey, enKey] of Object.entries(chineseToEnglishMapping)) {
                         if (["name", "description", "path", "id"].includes(enKey)) continue;
                         const counts = {};
                         currentDatasets.forEach(ds => {
-                            if (Array.isArray(ds[enKey])) ds[enKey].forEach(v => counts[v] = (counts[v] || 0) + 1);
-                            else if (ds[enKey]) counts[ds[enKey]] = (counts[ds[enKey]] || 0) + 1;
+                            if (Array.isArray(ds[enKey])) {
+                                ds[enKey].forEach(v => {
+                                    const key = String(v).trim();
+                                    counts[key] = (counts[key] || 0) + 1;
+                                });
+                            } else if (ds[enKey] !== undefined && ds[enKey] !== null) {
+                                const key = String(ds[enKey]).trim();
+                                counts[key] = (counts[key] || 0) + 1;
+                            }
                         });
                         for (const [val, num] of Object.entries(counts)) {
-                            const checkbox = document.querySelector('input[value="' + CSS.escape(val) + '"]');
+                            const checkbox = document.querySelector(
+                                'input[data-field="' + enKey + '"][value="' + CSS.escape(val) + '"]'
+                            );
                             if (checkbox) {
                                 const id = checkbox.id + '-count';
                                 const el = document.getElementById(id);
@@ -371,10 +456,12 @@
                         }
                     }
 
+
                     totalPages = Math.max(1, Math.ceil(currentDatasets.length / itemsPerPage));
                     currentPage = 1;
                     renderVideos();
                 }
+
 
                 function renderVideos() {
                     const start = (currentPage - 1) * itemsPerPage;
@@ -457,6 +544,8 @@
             });
         })();
     </script>
+
+
 </body>
 
 </html>
