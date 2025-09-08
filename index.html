@@ -356,7 +356,7 @@
                             const hasChild = Object.keys(node[key]).length > 0;
                             html += `<li>
                                 <label class="checkbox-container">
-                                <input type="checkbox" class="item-checkbox" id="${id}" value="${escapeHtml(key)}">
+                                <input type="checkbox" class="item-checkbox" data-field="item" id="${id}" value="${escapeHtml(key)}">
                                 ${escapeHtml(key)} <small class="text-muted">(<span id="${id}-count">0</span>)</small>
                                 </label>`;
                             if (hasChild) {
