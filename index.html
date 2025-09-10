@@ -34,7 +34,6 @@
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
         }
 
-        /* 给整个标签栏加滚动条 */
         #filters {
             max-height: 75vh;
             overflow-y: auto;
@@ -99,8 +98,43 @@
             font-size: 0.8rem;
             padding: 5px;
             z-index: 10;
-            pointer-events: none;
+            /* pointer-events: none; */
+
+
+            /* 父容器：保持居中 */
+            display: flex;
+            justify-content: center;
+            /* 垂直居中 */
+            align-items: center;
+            /* 水平居中 */
+            text-align: center;
+
+            pointer-events: auto;
         }
+
+        /* 子容器：可滚动文本区域 */
+        .video-overlay-content {
+            max-height: 90%;
+            /* 避免超出父容器 */
+            overflow-y: auto;
+            /* 允许滚动 */
+            white-space: normal;
+            /* 自动换行 */
+            word-break: break-word;
+            /* 避免长单词溢出 */
+            scrollbar-width: thin;
+            /* 精简滚动条 */
+        }
+
+        .video-overlay-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .video-overlay-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 3px;
+        }
+
 
         .video-card:hover .video-overlay {
             opacity: 1;
@@ -217,19 +251,20 @@
                 const jsyamlLib = window.jsyaml;
 
                 const chineseToEnglishMapping = {
-                    "任务内容": "name",
-                    "描述": "description",
-                    "场景类型": "scene",
-                    "采集本体": "robot",
-                    "末端类型": "end",
-                    "相机数量": "cameraCount",
-                    "相机类型": "cameraType",
-                    "声音传感器数量": "soundSensors",
-                    "触觉传感器数量": "tactileSensors",
-                    "原子动作": "action",
-                    "物品": "item",
-                    "桌面高度": "tableHeight",
-                    "机器人高度": "robotHeight"
+                    "dataset_name": "name",
+                    "task_descriptions": "description",
+                    "scene_type": "scene",
+                    "device_model": "robot",
+                    "end_effector_type": "end",
+                    //"相机数量": "cameraCount",
+                    //"相机类型": "cameraType",
+                    //"声音传感器数量": "soundSensors",
+                    //"触觉传感器数量": "tactileSensors",
+                    "atomic_actions": "action",
+                    "objects": "item",
+                    "operation_platform_height": "tableHeight",
+                    //"机器人高度": "robotHeight",
+                    "dataset_uuid": "id"
                 };
 
                 function escapeHtml(str) {
@@ -255,10 +290,13 @@
                                 const enKey = chineseToEnglishMapping[cnKey] || cnKey;
                                 if (enKey === "description" && val !== undefined && val !== null) {
                                     ds[enKey] = String(val);
-                                } else if (enKey === "item" && typeof val === "object") {
-                                    ds[enKey] = Object.values(val).filter(v => v && v !== "null");
+                                } else if (enKey === "item" && Array.isArray(val)) {
+                                    // 修改物品解析逻辑
+                                    ds[enKey] = val.map(obj =>
+                                        [obj.level1, obj.level2, obj.level3, obj.level4, obj.level5]
+                                            .filter(v => v && v !== "null")
+                                    );
                                 } else {
-                                    // 特殊处理：声音传感器 & 触觉传感器，存成字符串，避免 0 被忽略
                                     if (enKey === "soundSensors" || enKey === "tactileSensors") {
                                         ds[enKey] = String(val);
                                     } else {
@@ -267,12 +305,12 @@
                                 }
                             }
                             ds.path = String(fileName).replace(/\.yml$/i, '');
-                            ds.id = String(idCounter++);
-
-                            debugger ;
+                            //ds.id = String(idCounter++);
 
                             datasets.push(ds);
                         }
+
+                        debugger;
 
                         buildAllCheckboxGroups(datasets);
                         applyFilters();
@@ -282,7 +320,8 @@
                     }
                 }
 
-                
+
+
 
                 function buildAllCheckboxGroups(datasets) {
                     filters.innerHTML = '';
@@ -310,10 +349,10 @@
                     values.forEach((val, i) => {
                         const id = cssClass + '-' + (i + 1);
                         const safeVal = String(val).trim();
-                        html += '<div class="checkbox-container"><label><input type="checkbox" class="' 
-                            + cssClass + '-checkbox" data-field="' + cssClass + '" id="' + id + '" value="' 
-                            + escapeHtml(safeVal) + '"> ' 
-                            + escapeHtml(safeVal) 
+                        html += '<div class="checkbox-container"><label><input type="checkbox" class="'
+                            + cssClass + '-checkbox" data-field="' + cssClass + '" id="' + id + '" value="'
+                            + escapeHtml(safeVal) + '"> '
+                            + escapeHtml(safeVal)
                             + ' <small class="text-muted">(<span id="' + id + '-count">0</span>)</small></label></div>';
                     });
                     const block = document.createElement('div');
@@ -339,30 +378,42 @@
                     root.innerHTML = '<h5 class="mb-1">' + escapeHtml(title) + '</h5>';
                     const tree = {};
 
+                    // 构建物品树
                     datasets.forEach(ds => {
                         if (Array.isArray(ds.item)) {
-                            let node = tree;
-                            ds.item.forEach(it => {
-                                if (!node[it]) node[it] = {};
-                                node = node[it];
+                            ds.item.forEach(path => {
+                                let node = tree;
+                                path.forEach(level => {
+                                    if (!node[level]) node[level] = {};
+                                    node = node[level];
+                                });
                             });
                         }
                     });
 
-                    function renderNode(node, prefix) {
+
+                    // 渲染节点
+                    function renderNode(node, prefix, level = 0) {
                         let html = '<ul>';
                         Object.keys(node).forEach((key, i) => {
                             const id = prefix + '-' + i;
                             const hasChild = Object.keys(node[key]).length > 0;
+
+                            // 用 " -" 表示层级缩进
+                            const prefixStr = ' ' + '-'.repeat(level);
+
                             html += `<li>
                                 <label class="checkbox-container">
                                 <input type="checkbox" class="item-checkbox" data-field="item" id="${id}" value="${escapeHtml(key)}">
-                                ${escapeHtml(key)} <small class="text-muted">(<span id="${id}-count">0</span>)</small>
+                                ${prefixStr} ${escapeHtml(key)} <small class="text-muted">(<span id="${id}-count">0</span>)</small>
                                 </label>`;
+
                             if (hasChild) {
+                                // 默认折叠
                                 html += `<span class="tree-toggle">▶</span>
-                                <div class="nested">${renderNode(node[key], id)}</div>`;
+                                <div class="nested" style="display:none;">${renderNode(node[key], id, level + 1)}</div>`;
                             }
+
                             html += `</li>`;
                         });
                         html += '</ul>';
@@ -372,33 +423,35 @@
                     root.innerHTML += renderNode(tree, 'item');
                     container.appendChild(root);
 
+                    // 展开/收起逻辑
                     root.addEventListener('click', (e) => {
                         if (e.target.classList.contains('tree-toggle')) {
                             const li = e.target.closest('li');
                             li.classList.toggle('expanded');
                             e.target.textContent = li.classList.contains('expanded') ? '▼' : '▶';
+
+                            const nested = li.querySelector('.nested');
+                            if (nested) {
+                                nested.style.display = li.classList.contains('expanded') ? 'block' : 'none';
+                            }
                         }
                     });
 
                     root.addEventListener('change', () => applyFilters());
                 }
 
+
+
+
+
                 function applyFilters() {
-
-                    console.log("当前映射表:", chineseToEnglishMapping);
-                    console.log("某个数据集:", currentDatasets[0]);
-
-
                     selectedDatasets.clear();
                     const q = (searchBox && searchBox.value) ? String(searchBox.value).trim().toLowerCase() : '';
 
                     const activeFilters = {};
                     for (const [cnKey, enKey] of Object.entries(chineseToEnglishMapping)) {
-
-                        console.log("正在统计字段:", enKey);
-
-
                         if (["name", "description", "path", "id"].includes(enKey)) continue;
+
                         if (enKey === "item") {
                             const checked = Array.from(document.querySelectorAll('.item-checkbox:checked')).map(cb => cb.value);
                             if (checked.length > 0) activeFilters[enKey] = checked;
@@ -411,13 +464,20 @@
                         }
                     }
 
+                    // 数据集过滤逻辑
                     currentDatasets = datasets.filter(ds => {
                         if (q) {
                             const name = String(ds.name || ds.path || '').toLowerCase();
                             if (!name.includes(q)) return false;
                         }
                         for (const [key, vals] of Object.entries(activeFilters)) {
-                            if (Array.isArray(ds[key])) {
+                            if (key === "item" && Array.isArray(ds.item)) {
+                                // 检查路径里是否包含被选中的任意值
+                                const match = ds.item.some(path =>
+                                    path.some(level => vals.includes(level))
+                                );
+                                if (!match) return false;
+                            } else if (Array.isArray(ds[key])) {
                                 if (!ds[key].some(v => vals.includes(String(v)))) return false;
                             } else if (ds[key] !== undefined && ds[key] !== null) {
                                 if (!vals.includes(String(ds[key]))) return false;
@@ -428,16 +488,30 @@
                         return true;
                     });
 
-                    debugger ; 
-                    // 修复统计 key 的类型问题（保证数字 0 也能统计到）
+                    // 数量统计（避免重复统计同一数据集的同一标签）
                     for (const [cnKey, enKey] of Object.entries(chineseToEnglishMapping)) {
                         if (["name", "description", "path", "id"].includes(enKey)) continue;
                         const counts = {};
                         currentDatasets.forEach(ds => {
-                            if (Array.isArray(ds[enKey])) {
+                            if (enKey === "item" && Array.isArray(ds.item)) {
+                                const seen = new Set(); // 本数据集已统计过的标签
+                                ds.item.forEach(path => {
+                                    path.forEach(level => {
+                                        const key = String(level).trim();
+                                        if (!seen.has(key)) {
+                                            counts[key] = (counts[key] || 0) + 1;
+                                            seen.add(key);
+                                        }
+                                    });
+                                });
+                            } else if (Array.isArray(ds[enKey])) {
+                                const seen = new Set();
                                 ds[enKey].forEach(v => {
                                     const key = String(v).trim();
-                                    counts[key] = (counts[key] || 0) + 1;
+                                    if (!seen.has(key)) {
+                                        counts[key] = (counts[key] || 0) + 1;
+                                        seen.add(key);
+                                    }
                                 });
                             } else if (ds[enKey] !== undefined && ds[enKey] !== null) {
                                 const key = String(ds[enKey]).trim();
@@ -456,11 +530,12 @@
                         }
                     }
 
-
                     totalPages = Math.max(1, Math.ceil(currentDatasets.length / itemsPerPage));
                     currentPage = 1;
                     renderVideos();
                 }
+
+
 
 
                 function renderVideos() {
@@ -483,7 +558,18 @@
 
                         const overlay = document.createElement('div');
                         overlay.className = 'video-overlay p-3';
-                        overlay.innerHTML = `<span><b>${escapeHtml(ds.name || ds.path)}</b><br>${escapeHtml(ds.description || '')}</span>`;
+                        //overlay.innerHTML = `<span><b>${escapeHtml(ds.name || ds.path)}</b><br>${escapeHtml(ds.description || '')}</span>`;
+
+                        overlay.innerHTML = `
+                            <div class="video-overlay-content">
+                                <div style="font-weight:bold; margin-bottom:4px;">
+                                ${escapeHtml(ds.name || ds.path)}
+                                </div>
+                                <div style="font-size:0.75rem; line-height:1.2;">
+                                ${escapeHtml(ds.description || '')}
+                                </div>
+                            </div>
+                            `;
 
                         col.appendChild(video);
                         col.appendChild(overlay);
